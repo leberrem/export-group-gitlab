@@ -1,0 +1,3 @@
+---
+gitlab_api_root: "api/v4"
+local_download_folder: "export"

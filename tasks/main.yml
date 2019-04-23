@@ -1,0 +1,76 @@
+---
+  - name: "list groups"
+    uri:
+      url: "{{ gitlab_url }}/{{ gitlab_api_root }}/groups?owned=true"
+      method: GET
+      headers:
+        PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+        Accept: 'application/json'
+      status_code: 200
+    register: list_groups
+
+  - name: "search group id"
+    set_fact:
+      gitlab_group_id: "{{ list_groups.json | json_query(query_group) }}"
+    vars:
+      query_group: "[?name=='{{ gitlab_group_name }}'].id"
+
+  - name: "view group id"
+    debug:
+      msg: "{{ gitlab_group_name }} = {{ gitlab_group_id[0] }}"
+
+  - name: "list projects"
+    uri:
+      url: "{{ gitlab_url }}/{{ gitlab_api_root }}/groups/{{ gitlab_group_id[0] }}/projects?include_subgroups=true"
+      method: GET
+      headers:
+        PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+        Accept: 'application/json'
+      status_code: 200
+    register: list_projects
+
+  - name: parse json return
+    set_fact:
+      gitlab_projects_id: "{{ list_projects.json | json_query('[].{name: name, id: id, namespace: namespace.full_path}') }}"        
+
+  - name: "view projects"
+    debug:
+      msg: "{{ gitlab_projects_id }}" 
+
+  - name: "schedule export"
+    uri:
+      url: "{{ gitlab_url }}/{{ gitlab_api_root }}/projects/{{ item.id }}/export"
+      method: POST
+      headers:
+        PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+        Accept: 'application/json'
+      status_code: 202
+    with_items: "{{ gitlab_projects_id }}"
+
+  - name: "check export status"
+    uri:
+      url: "{{ gitlab_url }}/{{ gitlab_api_root }}/projects/{{ item.id }}/export"
+      method: GET
+      headers:
+        PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+        Accept: 'application/json'
+      status_code: 200
+    retries: 40
+    delay: 3
+    register: result
+    until: result.json.export_status == "finished"
+    with_items: "{{ gitlab_projects_id }}"
+
+  - name: "create destination folder"
+    file:
+      path: "{{ local_download_folder }}/{{ item.namespace }}"
+      state: directory
+    with_items: "{{ gitlab_projects_id }}"
+
+  - name: "download projects"
+    get_url:
+      url: "{{ gitlab_url }}/{{ gitlab_api_root }}/projects/{{ item.id }}/export/download"
+      dest: "{{ local_download_folder }}/{{ item.namespace }}/{{ item.id }}-{{ item.name }}.tar.gz"
+      headers:
+        PRIVATE-TOKEN: "{{ gitlab_api_token }}"
+    with_items: "{{ gitlab_projects_id }}"
