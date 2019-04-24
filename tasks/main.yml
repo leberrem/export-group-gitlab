@@ -70,7 +70,7 @@
   - name: "download projects"
     get_url:
       url: "{{ gitlab_url }}/{{ gitlab_api_root }}/projects/{{ item.id }}/export/download"
-      dest: "{{ local_download_folder }}/{{ item.namespace }}/{{ item.id }}-{{ item.name }}.tar.gz"
+      dest: "{{ local_download_folder }}/{{ item.namespace }}/{{ item.name }}.tar.gz"
       headers:
         PRIVATE-TOKEN: "{{ gitlab_api_token }}"
     with_items: "{{ gitlab_projects_id }}"
